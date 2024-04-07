@@ -5,7 +5,7 @@ import scipy.io as sio
 import numpy as np
 import cv2
 from torch.utils.checkpoint import checkpoint
-from patchmatch import PatchMatch
+from deep_PM import PatchMatch
 from scse import SCSEUnet
 
 
