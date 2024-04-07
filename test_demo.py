@@ -6,7 +6,7 @@ from torchvision import transforms
 import cv2
 import time
 from pathlib import Path
-import models_osn as models
+import models_D2PRL as models
 from skimage import morphology
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
