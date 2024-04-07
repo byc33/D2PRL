@@ -312,5 +312,3 @@ class PatchMatch(nn.Module):
             offset_y_cnn, x_cor_zm, y_cor_zm,\
             x_cor_cnn, y_cor_cnn
 
-
-
