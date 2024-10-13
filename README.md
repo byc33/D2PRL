@@ -25,10 +25,10 @@ The output masks will be saved in `output` folder.
 ## Train
 If you want to train the model, please first download the training dataset and the pre-trained weights of SE-U-net, and then run train.py.
 
-training dataset:
+training dataset:https://pan.baidu.com/s/1PvSDcFiVmq5m_yFnp-RRVA
 
-code:
+code:j49t
 
-Pretrain weight of SE-U-net:https://pan.baidu.com/s/1tYIpEwxaPfZ64iCu06OTNg?pwd
+Pretrain weight of SE-U-net:https://pan.baidu.com/s/1tYIpEwxaPfZ64iCu06OTNg
 
 code:i0i2
