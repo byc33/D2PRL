@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import DataLoader
 from torch import nn
 from tqdm import tqdm
-import models_D2PRL as models
+import models_D2PRL_train as models
 import argparse
 import cv2
 import time
