@@ -1,138 +1,152 @@
-
+from torch.utils.data import Dataset, DataLoader
 import os
+import cv2
+import skimage
+from skimage import io
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
-from torch import nn
-from tqdm import tqdm
-import models_osn as models
-import argparse
-import cv2
-import time
-from getitem import Config,Data
-from sklearn.metrics import precision_recall_fscore_support
-device_ids = [0]
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+from torchvision import transforms
+import random
+from io import BytesIO
+from PIL import Image, ImageEnhance, ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-dir_name = time.strftime("weight_%Y_%m_%d_%H:%M:%S", time.localtime())
-input_size = 448
-savepath = './'+dir_name
-batchsize = 3
-lr = 1e-4
-save_interval = 1000
+def JP_IO(img):
+    QF_list = [40, 50, 60, 70, 80, 90, 100]
+    QF = random.choice(QF_list)
+    buffer = BytesIO()
+    img1 = Image.fromarray(img)
+    img1.save(buffer, "JPEG", quality=QF)
+    buffer.seek(0)  # find the byte stream
+    res = buffer.read()
+    byte_stream = BytesIO(res)
+    image = Image.open(byte_stream)
+    image = np.array(image)
+    return image
 
+def noise(img):
+    mean = 0
+    var_list = [0.009, 0.005, 0.0005]
+    var = random.choice(var_list)
+    image = np.array(img / 255, dtype=float)
+    noise = np.random.normal(mean, var ** 0.5, image.shape)
+    out = image + noise
+    out = np.clip(out, 0, 1.0)
+    out = np.uint8(out * 255)
+    return np.array(out)
 
-def dice_loss(y_true, y_pred, epsilon=1e-6):
-    """
-    Calculate dice loss for PyTorch.
-    Dice loss is a loss function used for binary classification problems, where y_true (ground truth labels)
-    and y_pred (predicted labels) are two binary tensors. The formula for calculating dice loss is
-    1 - (2 * intersection(y_true, y_pred) + epsilon) / (sum(y_true) + sum(y_pred) + epsilon), where
-    'intersection' is the element-wise AND operation between the two tensors.
-    :param y_true: Ground truth labels (tensor)
-    :param y_pred: Predicted labels (tensor)
-    :param epsilon: Small value to avoid division by zero (scalar)
-    :return: Dice loss (scalar)
-    """
+class Config(object):
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        print('\nParameters...')
+        for k, v in self.kwargs.items():
+            print('%-10s: %s' % (k, v))
 
-    y_true = y_true.flatten(start_dim=1)
-    y_pred = y_pred.flatten(start_dim=1)
-
-    intersection = torch.sum(y_true * y_pred, dim=1)
-    union = torch.sum(y_true, dim=1) + torch.sum(y_pred, dim=1)
-
-    dice = 1 - (2 * intersection + epsilon) / (union + epsilon)
-
-    return dice.mean()
-
-
-def save_checkpoint(model, name):
-    torch.save(model.state_dict(), os.path.join(savepath, name))
+    def __getattr__(self, name):
+        if name in self.kwargs:
+            return self.kwargs[name]
+        else:
+            return None
 
 
-if __name__ == "__main__":
-    train_path = '。/train'
-    cfg = Config(train_path=train_path, mode='train', batch=batchsize, size=input_size)
-    data = Data(cfg, train_path=train_path)
-    train_data_loader = DataLoader(data, batch_size=cfg.batch, shuffle=True, num_workers=8)
-    device = torch.device("cuda:0")
-    np.random.seed(33)
-    torch.manual_seed(33)
-    torch.cuda.manual_seed_all(33)
-    model = models.DPM(input_size, batchsize, 32)
-    model_path = 'pretrain.pth'
-    moel_dict = model.state_dict()
-    for k, v in torch.load(model_path).items():
-        moel_dict.update({k.replace('module.', ''): v})
+class CustomTransform:
+    def __init__(self, size=224):
+        if isinstance(size, int) or isinstance(size, float):
+            self.size = (size, size)
+        else:
+            self.size = size
+        self.to_tensor = transforms.ToTensor()
+
+    def resize(self, img=None, mask=None):
+        if img is not None:
+            img = skimage.img_as_float32(img)
+            if img.shape[0] != self.size[0] or img.shape[1] != self.size[1]:
+                img = cv2.resize(
+                    img, self.size, interpolation=cv2.INTER_LINEAR)
+
+        if mask is not None:
+            if mask.shape[0] != self.size[0] or mask.shape[1] != self.size[1]:
+                mask = cv2.resize(
+                    mask, self.size, interpolation=cv2.INTER_NEAREST)
+        return img, mask
+
+    def __call__(self, img=None, mask=None, other_tfm=None,target_trm=None):
+        img, mask = self.resize(img, mask)
+        if other_tfm is not None:
+            img = other_tfm(img)
+            mask = target_trm(mask)
+        if img is not None:
+            img = self.to_tensor(img).float()
+
+        if mask is not None:
+            mask = self.to_tensor(mask).float()
+
+        return img, mask
 
 
+class Data(Dataset):
+    def __init__(self, cfg, train_path=None, val_path=None, casia_path=None, train_flag=True):
+        self.cfg = cfg
+        self.flag = train_flag
+        self.size = cfg.size
+        self.train_path = train_path
+        self.val_path = val_path
+        self.casia_path = casia_path
 
-    model.load_state_dict(moel_dict)
+        #
+        if cfg is not None:
+            self.transform = CustomTransform(size=cfg.size)
+        if train_path != None:
+            self.sample1 = os.listdir(train_path + '/image')
+        if val_path != None:
+            self.sample2 = os.listdir(val_path + '/image')
+        if casia_path != None:
+            self.sample3 = os.listdir(casia_path + '/image')
 
-    os.makedirs(savepath, exist_ok=True)
-    opt_list = list(model.head_mask.parameters())\
-               + list(model.last_mask.parameters()) \
-               + list(model.head_mask2.parameters()) \
-               + list(model.last_mask2.parameters()) \
-               + list(model.head_mask3.parameters()) \
-               + list(model.head_mask4.parameters()) \
-               + list(model.unet.parameters())
-    optimizer = torch.optim.Adam(opt_list, lr)
+    def __getitem__(self, idx):
 
-    model = nn.DataParallel(model, device_ids=device_ids)
+        if self.cfg.mode == 'train':
+            name = self.sample1[idx]
+            image = io.imread(self.train_path + '/image/' + name)
 
-    num_iter_per_epoch = len(train_data_loader)
-    step = 0
-    for epoch in range(10):
-        model.train()
-        epoch = epoch + 1
-        epoch_loss = []
-        epoch_loss1 = []
-        epoch_loss2 = []
-        loss_ls = []
-        d_loss = 0
-        g_loss = 0
-        det_loss = 0
-        loc_loss = 0
-        progress_bar = tqdm(train_data_loader)
-        for iter, data in enumerate(progress_bar):
-            if step < 0:
-                step += 1
-                continue
-            imgs, gts, _ = data
-            imgs = imgs.to(device)
-            gts = gts.to(device)
-            optimizer.zero_grad()
-            simi_gts = (1 - gts[:, 2, :, :]).unsqueeze(1).type(torch.float)
-            simi_gts2 = (gts[:, 0, :, :]).unsqueeze(1).type(torch.float)
-            simi_gts3 = (gts[:, 1, :, :]).unsqueeze(1).type(torch.float)
+            if image.size < 1024*1024*2:
+                image = np.expand_dims(image, axis=2)
+                image = np.repeat(image, 3, 2)
+            mask = cv2.imread(self.train_path + '/mask/' + name).astype(np.float32)
+            mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
 
-            g_out1, g_out2, g_out3, _, _, _ = model(imgs, gts)
-            _, fusion_gts = gts.max(dim=1)
+        if self.cfg.mode == 'valid':
+            name = self.sample2[idx]
+            image = io.imread(self.val_path + '/image/' + name)[:, :, :3]
+            mask = cv2.imread(self.val_path + '/mask/' + name[:-4]+'.png').astype(np.float32)
+            mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
 
-            g_loss1 = dice_loss(g_out1, simi_gts)
-            er, _ = torch.max(torch.cat(
-                [0.05 * torch.ones_like(g_out3).to(g_out3.device) - g_out3 * (simi_gts3 - simi_gts2),
-                 torch.zeros_like(g_out3).to(g_out3.device)], dim=-3), dim=1, keepdim=True)
-            g_loss2 = torch.sum(g_out2 * simi_gts * er * 0.0001)
+        if self.cfg.mode == 'casia':
+            name = self.sample3[idx]
+            image = io.imread(self.casia_path + '/image/' + name)[:, :, :3]
+            mask = cv2.imread(self.casia_path + '/mask/' + name[:-4]+'.png').astype(np.float32)
+            mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
 
-            loss = g_loss1 + g_loss2
-            loss.backward()
-            optimizer.step()
+        mode_list = ['zero', 'zero', 'JC', 'JC', 'JC', 'NA']
+        mode = random.choice(mode_list)
 
-            epoch_loss.append(float(loss))
-            epoch_loss1.append(float(g_loss1))
-            epoch_loss2.append(float(g_loss2))
-            step += 1
-            progress_bar.set_description(
-                'St: {}. Epo: {}/{}. Iter: {}/{}. loss1: {:.5f}.loss2: {:.5f}.loss: {:.5f}.loss: {:.5f}'.format(
-                    step, epoch, 10, iter + 1, num_iter_per_epoch, g_loss1.item(), g_loss2.item(),
-                    np.mean(epoch_loss1), np.mean(epoch_loss2)))
+        if self.flag:
+            if mode == 'zero':
+                image = image
+            elif mode == 'JC':
+                image = JP_IO(image)
+            elif mode == 'NA':
+                image = noise(image)
 
-            if step % 1000 == 0 and step > 0:
-                save_checkpoint(model, f'{step}.pth')
-                print('checkpoint...')
-                epoch_loss1 = []
-                epoch_loss2 = []
-                print('Epoch: {}/{}. loss: {:1.5f}'.format(epoch, 10, np.mean(epoch_loss)))
-        print('Epoch: {}/{}. loss: {:1.5f}'.format(epoch, 10, np.mean(epoch_loss)))
+        if np.max(mask)==255.0:
+            mask = mask/255
+        img, cmd_mask = self.transform(image, mask, other_tfm=None, target_trm=None)
+        return img, cmd_mask, name
+
+    def __len__(self):
+        if self.cfg.mode == 'train':
+            return len(self.sample1)
+        elif self.cfg.mode == 'valid':
+            return len(self.sample2)
+        elif self.cfg.mode == 'casia':
+            return len(self.sample3)
