@@ -105,7 +105,7 @@ if __name__ == "__main__":
             simi_gts2 = (gts[:, 0, :, :]).unsqueeze(1).type(torch.float)
             simi_gts3 = (gts[:, 1, :, :]).unsqueeze(1).type(torch.float)
 
-            g_out1, g_out2, g_out3, g_out4 = model(imgs, gts)
+            g_out1, g_out2, g_out3, g_out4 = model(imgs)
             _, fusion_gts = gts.max(dim=1)
 
             g_loss1 = dice_loss(g_out1, simi_gts)
