@@ -9,6 +9,7 @@ pip install -r requirements.txt
 
 ## Pretrained models
 Pretrain weight：https://pan.baidu.com/s/1m_FU5fqBl5J50uKs9Vu7Ng
+code:xhwq
 
 ## Test on Custom folder
 
