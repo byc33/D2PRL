@@ -56,7 +56,7 @@ if __name__ == "__main__":
     model = model.cuda()
     model.eval()
 
-    img_path = "./testpic/1.tif"
+    img_path = "./testpic/1.jpg"
     img = cv2.imread(img_path)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     h_o, w_o, _ = img.shape
@@ -82,6 +82,6 @@ if __name__ == "__main__":
     predt_, preds_, predb_ = post_3c(predt_, preds_)
     pred3c = np.concatenate([np.expand_dims(predb_, axis=2), np.expand_dims(preds_, axis=2),
                              np.expand_dims(predt_, axis=2)], axis=2)
-    cv2.imwrite('./testpic/1_3c_result.png',  cv2.resize((pred3c * 255).astype(np.uint8), (w_o, h_o)))
+    cv2.imwrite('./output/1_3c_result.png',  cv2.resize((pred3c * 255).astype(np.uint8), (w_o, h_o)))
     print('test done')
 
