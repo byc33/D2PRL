@@ -64,10 +64,7 @@ if __name__ == "__main__":
     # moel_dict = model.state_dict()
     # for k, v in torch.load(model_path).items():
     #     moel_dict.update({k[7 :]: v for k, v in torch.load(model_path).items()})
-
-
-
-    model.load_state_dict(moel_dict)
+    # model.load_state_dict(moel_dict)
 
     os.makedirs(savepath, exist_ok=True)
     opt_list = list(model.head_mask.parameters())\
